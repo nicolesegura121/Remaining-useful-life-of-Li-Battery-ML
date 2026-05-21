@@ -1,0 +1,5 @@
+data/
+extra_infos/
+Battery RUL/
+metadata.csv
+__pycache__/
