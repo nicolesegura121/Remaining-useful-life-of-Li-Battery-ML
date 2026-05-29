@@ -1,0 +1,8 @@
+name: batterySOH-env
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - requests
+  - pandas
+prefix: C:\Users\nicol\miniconda3\envs\batterySOH-env
