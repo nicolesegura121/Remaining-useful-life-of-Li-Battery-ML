@@ -14,7 +14,7 @@ To obtain the data, please visit the following sites:
         - NASA- Battery Dataset: https://www.kaggle.com/datasets/patrickfleith/nasa-battery-dataset
 
 # Repository structure: 
-
+```
 battery-prediction/
 │
 ├── data/                    # Data directory
@@ -31,7 +31,7 @@ battery-prediction/
 ├── environment.yml         # Project dependencies
 ├── README.md                # Project documentation
 └── LICENSE                  # License file
-
+```
 
 # Results 
 Feature engineering was the most relevant aspect throughout this project. Making careful decisions about the type of features included in the models was critical to achieve good performance. Future work will be performed in improving the model architecture, specially for LSTM. 
