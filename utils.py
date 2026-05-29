@@ -1,6 +1,10 @@
 #Important functions for the project on battery managment
 def time_format(meta):
     import pandas as pd
+    '''
+    The function cleans the date format and returns a uniform format
+    '''
+
     #Cleaning the format from symbols
     meta["start_time"]=meta["start_time"].replace((r'[\[\]]'), '',regex=True)
     #Split in columns
@@ -25,6 +29,11 @@ def time_format(meta):
 
 def preprocessing_meta(meta): 
     import pandas as pd
+    '''
+    The function takes in the incorrectly assigned numeric values in the initial meta file.
+
+    '''
+
     #Converting Capacity and resistances to integer values
     meta["Capacity"]=pd.to_numeric(meta["Capacity"],errors="coerce")
     meta["Re"]=pd.to_numeric(meta["Re"],errors="coerce")
@@ -58,7 +67,7 @@ def battery_cycles_df(meta,battery_names, types):
         data["type"] = row["type"]
         data["test_id"] = row["test_id"]
         data["battery_id"] = row["battery_id"]
-        data["start_time"] = row["new_time"]
+        data["new_time"] = row["new_time"]
 
         if "impedance" in types:
             data["Re"] = row["Re"]
@@ -76,24 +85,33 @@ def battery_cycles_df(meta,battery_names, types):
     return combined_df
 
 def continuous_time(df):
-    # Convert datetime to Unix seconds
-    unix_start = df["start_time"].astype("int64") / 1e9
+    '''
+    The takes the date of starting the experiment and returns a common timeline for each battery
+    '''
 
-    # Absolute continuous experiment time
-    df["real_time"] = unix_start + df["Time"]
+    df = df.sort_values(["battery_id", "new_time"])
+
+    # Convert datetime to Unix seconds and calculate the differential time for the battery life
+    df["dt_exp"] = df.groupby("battery_id")["new_time"].diff().dt.total_seconds().fillna(0)
+    #We get the total history of the battery
+    df["real_time"] = (df.groupby("battery_id")["dt_exp"].cumsum()).fillna(0)+df["Time"]
 
     # Normalize EACH battery independently
-    df["norm_time"] = (df.groupby("battery_id")["real_time"].transform(lambda x: x - x.min())).reset_index(drop=True)
+
+    df["norm_time"] = df.groupby("battery_id")["real_time"].transform(lambda x: x/x.max())
 
     return df
 
 def current_capacity(df):
     import numpy as np
+    '''
+    The function calculates the capacity based on Idt.
+    '''
     # Ensure proper ordering
-    df = df.sort_values(["battery_id", "test_id", "norm_time"])
+    df = df.sort_values(["battery_id", "test_id", "Time"])
 
     #Time differential per battery using the normalized time
-    df["dt"]= df.groupby(["battery_id", "test_id"])["norm_time"].diff().fillna(0)
+    df["dt"]= df.groupby(["battery_id", "test_id"])["Time"].diff().fillna(0)
     
     #Incremental change in capacity
     df["dQ"] = df["Current_measured"]*df["dt"]
@@ -325,7 +343,7 @@ def charging_decay(df):
             if len(CV_phase)>=10:
 
                 CV_phase["t_rel"] = (CV_phase["Time"] - CV_phase["Time"].iloc[0])
-                
+                charging_time = CV_phase["t_rel"].max()
                 #remove invalid values
 
                 CV_phase = CV_phase.replace([np.inf, -np.inf],np.nan)
@@ -349,6 +367,7 @@ def charging_decay(df):
             "battery_id": battery,
             "test_id": cycle,
             "exp_coefficient": exp_coeff,
+            "charging_duration": charging_time
         })
     return pd.DataFrame(results)
 
@@ -431,10 +450,11 @@ def ransac_clean_outliers(df,feature):
         "time_Tmax" : 350,
         "T_peak" : 1,
         "exp_coefficient":1e-4,
+        "charging_duration":500,
         "Area_Under_curve":10000,
         "slope":0.5,
         "intercept": 0.5,
-        "SoH": 30,
+        "SoH_charge": 30,
     }
     for battery in batteries: 
         mask_battery = (df_clean["battery_id"]==battery)
@@ -455,3 +475,123 @@ def ransac_clean_outliers(df,feature):
         #interpolate those values
         df_clean.loc[outlier_idx,feature] = corrected_values
     return df_clean
+def discharge_Tmax(df):
+    from scipy.ndimage import gaussian_filter1d
+    from scipy.stats import linregress
+    import pandas as pd
+    import numpy as np
+    df = df.copy()
+    results=[]
+    grouped = df.groupby(["battery_id", "test_id"])
+    for (battery, cycle), cycle_df in grouped:
+        cycle_df = cycle_df.sort_values("Time")
+
+        idx_Tmax = cycle_df["Temperature_measured"].idxmax()
+        Tmax = cycle_df.loc[idx_Tmax, "Temperature_measured"]
+        t_Tmax = cycle_df.loc[idx_Tmax, "Time"]
+
+        truncated_cycle_df = cycle_df.truncate(after = idx_Tmax)
+        x=truncated_cycle_df["Temperature_measured"].values
+        y=truncated_cycle_df["Time"].values
+        res = linregress(x, y)
+        slope= res.slope
+        intercept = res.intercept
+    
+        results.append({
+            "battery_id": battery,
+            "test_id": cycle,
+            "t_Tmax": t_Tmax,
+            "Tmax" : Tmax,
+            "slope": slope,
+            "intercept": intercept
+            })
+
+    return pd.DataFrame(results)
+
+def time_discharge(df): 
+    import numpy as np
+    import pandas as pd
+    ##Measure time after truncation of voltage
+
+    results_Vdischarge=[]
+    #Obtaining the capacity of the first cycles: 
+    iCap_idx_D = df.loc[df["test_id"]==1].groupby("battery_id")["capacity_Ah"].idxmin()
+    iCap_B0018_D= df.loc[((df["battery_id"]=="B0018")&(df["test_id"]==2))].groupby("battery_id")["capacity_Ah"].idxmin()
+    iCap_idx = pd.concat([iCap_idx_D,iCap_B0018_D])
+
+    #Locate the capacity value at each index
+    iCap_D = (df.loc[iCap_idx, ["battery_id", "capacity_Ah"]].set_index("battery_id")["capacity_Ah"])
+
+    grouped = df.groupby(["battery_id", "test_id"])
+    for (battery, cycle), cycle_df in grouped:
+        cycle_df = cycle_df.sort_values("Time")
+
+        idx_Vmin = cycle_df["Voltage_measured"].idxmin()
+        truncated_cycle_df = cycle_df.truncate(after = idx_Vmin)
+        truncated_cycle_df = truncated_cycle_df.loc[truncated_cycle_df["Voltage_measured"]>2.8]
+        t_duration = truncated_cycle_df["Time"].iloc[-1] - truncated_cycle_df["Time"].iloc[0]
+
+        #Extract the SoH for each cycle from the truncated 
+        #Final capacity at each cycle
+        cycle_capacity = truncated_cycle_df["capacity_Ah"].min()
+        initial_capacity = iCap_D[battery]
+        SoH_discharge = abs(cycle_capacity)/abs(initial_capacity)*100
+
+        Q_final = abs(cycle_capacity)
+
+        truncated_cycle_df["discharge_pct"]= (abs(truncated_cycle_df["capacity_Ah"])/Q_final*100)
+
+        #when SoH is 10%
+        idx_SoH10 = truncated_cycle_df["discharge_pct"].sub(10).abs().idxmin()
+        V_SoH10 = truncated_cycle_df.loc[idx_SoH10, "Voltage_measured"]
+        
+        #when SoH is 50%
+        idx_SoH50 = truncated_cycle_df["discharge_pct"].sub(50).abs().idxmin()
+        V_SoH50 = truncated_cycle_df.loc[idx_SoH50, "Voltage_measured"]
+        
+        #Area under the curve Voltage-time
+        X = truncated_cycle_df["Time"].values
+        Y = truncated_cycle_df["Voltage_measured"].values
+        A = np.trapezoid(Y,X)
+
+
+        
+        results_Vdischarge.append({
+            "battery_id": battery,
+            "test_id": cycle,
+            "t_discharge": t_duration,
+            "V_SoH10" : V_SoH10,
+            "V_SoH50":V_SoH50,
+            "voltage_profile_area" : A,
+            "SoH_discharge":SoH_discharge
+            })
+        
+    return pd.DataFrame(results_Vdischarge)
+
+
+def visualize_loss(history, title):
+    loss = history.history["loss"]
+    val_loss = history.history["val_loss"]
+    epochs = range(len(loss))
+    plt.figure()
+    plt.plot(epochs, loss, "b", label="Training loss")
+    plt.plot(epochs, val_loss, "r", label="Validation loss")
+    plt.title(title)
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.legend()
+    plt.show()
+
+def visualize_error(history, title):
+    error = history.history["mse"]
+    val_error = history.history["val_mse"]
+    epochs = range(len(error))
+    plt.figure()
+    plt.plot(epochs, error, "b", label="Training error")
+    plt.plot(epochs, val_error, "r", label="Validation error")
+    plt.title(title)
+    plt.xlabel("Epochs")
+    plt.ylabel("Mean squared error")
+    plt.legend()
+    plt.show()
+
