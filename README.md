@@ -1,4 +1,4 @@
-# Lithium ion battery state of health prediction:battery:
+# Lithium ion battery state of health prediction :battery:
 
 This project implements machine learning and deep learning models to predict the state of health of a Li-ion battery based on NASA's battery cycling data.
 
