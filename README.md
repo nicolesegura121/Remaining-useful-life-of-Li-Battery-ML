@@ -14,34 +14,24 @@ To obtain the data, please visit the following sites:
         - NASA- Battery Dataset: https://www.kaggle.com/datasets/patrickfleith/nasa-battery-dataset
 
 # Repository structure: 
+
 battery-prediction/
 │
 ├── data/                    # Data directory
 │   └── README.md            # Instructions for downloading data
 │
 ├── notebooks/               # Jupyter notebooks
-│   ├── battery_data_analysis.ipynb   # Data exploration and feature engineering
-│   └── battery_prediction.ipynb      # Model training and evaluation
+│   ├── EDA.ipynb   # Data exploration feature selection
+│   └── Models.ipynb      # Model: LSTM, XGboost, ADA boosting and SVR. Training and prediction results
 │
-├── models/                  # Saved model files
+├── data_info/                  # Description of the experiments present in the dataset.
 │
 ├── utils/                   # Utility functions
-│   ├── __init__.py
-│   ├── data_loader.py       # Functions to load and preprocess data
-│   └── plotting.py          # Visualization functions
 │
-├── requirements.txt         # Project dependencies
+├── environment.yml         # Project dependencies
 ├── README.md                # Project documentation
 └── LICENSE                  # License file
 
-* Goal: Data-driven prediction of battery failures for safety managment.
 
-* Steps:
-    - Exploration of data and related literature
-    - Selection of features and targe
-    - Exploration of benchmarked models
-    - Use of LSTM for prediction.
-
-
-
-(could it also be done for fuel cells??--> future outlook)
+# Results 
+Feature engineering was the most relevant aspect throughout this project. Making careful decisions about the type of features included in the models was critical to achieve good performance. Future work will be performed in improving the model architecture, specially for LSTM. 
