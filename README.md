@@ -17,9 +17,6 @@ To obtain the data, please visit the following sites:
 ```
 battery-prediction/
 │
-├── data/                    # Data directory
-│   └── README.md            # Instructions for downloading data
-│
 ├── notebooks/               # Jupyter notebooks
 │   ├── EDA.ipynb   # Data exploration feature selection
 │   └── Models.ipynb      # Model: LSTM, XGboost, ADA boosting and SVR. Training and prediction results
